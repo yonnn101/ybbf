@@ -1,6 +1,6 @@
 # yonnn
 
-Unified bug bounty / attack-surface framework (FastAPI, PostgreSQL, Redis/Celery, MinIO).
+Unified bug bounty / attack-surface framework.
 
 **Security:** defaults, env files, and what to do if secrets hit Git — see [SECURITY.md](SECURITY.md). Optional: `scripts/check-tracked-secrets.ps1` before commits.
 
