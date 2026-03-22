@@ -1,0 +1,20 @@
+# Secrets and local env (never commit real credentials)
+.env*
+!.env.example
+
+# Keys / credential files
+*.pem
+*.key
+id_rsa
+id_ed25519
+secrets/
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cursorrules
+specification.md
