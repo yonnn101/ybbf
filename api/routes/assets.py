@@ -8,23 +8,21 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_active_user, get_db
-from models.program import Program
+from models.user import User
 from schemas.asset_actions import AssetIngestRequest
 from schemas.graph import GraphEdge, GraphNode, GraphView
 from services import asset_service, program_service
 
-router = APIRouter(
-    tags=["assets"],
-    dependencies=[Depends(get_current_active_user)],
-)
+router = APIRouter(tags=["assets"])
 
 
 @router.get("/programs/{program_id}/graph", response_model=GraphView)
 async def get_program_graph(
     program_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> GraphView:
-    program = await program_service.get_program(db, program_id)
+    program = await program_service.get_program_for_owner(db, program_id, current_user.id)
     if program is None:
         raise HTTPException(status_code=404, detail="Program not found")
     assets, edges = await asset_service.get_program_graph(db, program_id)
@@ -41,9 +39,10 @@ async def ingest_asset(
     program_id: uuid.UUID,
     body: AssetIngestRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> dict[str, str | None]:
     try:
-        program = await db.get(Program, program_id)
+        program = await program_service.get_program_for_owner(db, program_id, current_user.id)
         if program is None:
             raise HTTPException(status_code=404, detail="Program not found")
         child, rel = await asset_service.add_asset_with_relation(

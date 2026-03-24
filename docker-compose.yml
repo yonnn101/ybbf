@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: yonnn_password
       POSTGRES_DB: yonnn_db
     ports:
-      - "5432:5432"
+      # Host 15432 avoids Windows Hyper-V / excluded ranges that often block 5432–5433.
+      - "15432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

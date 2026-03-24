@@ -6,8 +6,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
+from api.error_handlers import request_validation_exception_handler
 from api.routes import admin, assets, auth, programs
 from core.auth_settings import bootstrap_superuser_enabled, get_auth_settings
 from core.database import AsyncSessionLocal
@@ -45,6 +47,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
 
 app.include_router(auth.router)
 app.include_router(admin.router)

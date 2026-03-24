@@ -8,23 +8,22 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_active_user, get_db
+from models.user import User
 from schemas.program import ProgramCreate, ProgramRead, ProgramUpdate
 from services import program_service
 
-router = APIRouter(
-    prefix="/programs",
-    tags=["programs"],
-    dependencies=[Depends(get_current_active_user)],
-)
+router = APIRouter(prefix="/programs", tags=["programs"])
 
 
 @router.post("", response_model=ProgramRead, status_code=status.HTTP_201_CREATED)
 async def create_program(
     body: ProgramCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> ProgramRead:
     program = await program_service.create_program(
         db,
+        current_user.id,
         name=body.name,
         platform=body.platform,
         reward_type=body.reward_type,
@@ -36,8 +35,11 @@ async def create_program(
 
 
 @router.get("", response_model=list[ProgramRead])
-async def list_programs(db: AsyncSession = Depends(get_db)) -> list[ProgramRead]:
-    programs = await program_service.list_programs(db)
+async def list_programs(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list[ProgramRead]:
+    programs = await program_service.list_programs(db, current_user.id)
     return [ProgramRead.model_validate(p) for p in programs]
 
 
@@ -45,8 +47,9 @@ async def list_programs(db: AsyncSession = Depends(get_db)) -> list[ProgramRead]
 async def get_program(
     program_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> ProgramRead:
-    program = await program_service.get_program(db, program_id)
+    program = await program_service.get_program_for_owner(db, program_id, current_user.id)
     if program is None:
         raise HTTPException(status_code=404, detail="Program not found")
     return ProgramRead.model_validate(program)
@@ -57,10 +60,12 @@ async def update_program(
     program_id: uuid.UUID,
     body: ProgramUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> ProgramRead:
     program = await program_service.update_program(
         db,
         program_id,
+        current_user.id,
         name=body.name,
         platform=body.platform,
         reward_type=body.reward_type,
@@ -77,7 +82,8 @@ async def update_program(
 async def delete_program(
     program_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> None:
-    deleted = await program_service.delete_program(db, program_id)
+    deleted = await program_service.delete_program(db, program_id, current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Program not found")

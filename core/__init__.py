@@ -1,5 +1,5 @@
-"""Infrastructure layer: shared config, database, logging, and cross-cutting utilities."""
+"""Infrastructure layer: import submodules explicitly (e.g. ``core.database``, ``core.security``)."""
 
-from core.database import AsyncSessionLocal, engine, get_db
+from core.base_tool import AsyncBaseTool, BaseTool, ToolResult
 
-__all__ = ["AsyncSessionLocal", "engine", "get_db"]
+__all__ = ["AsyncBaseTool", "BaseTool", "ToolResult"]

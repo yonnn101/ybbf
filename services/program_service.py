@@ -1,4 +1,4 @@
-"""Business logic: program CRUD (scope containers for assets)."""
+"""Business logic: program CRUD (scope containers for assets), scoped by owner."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from models.program import Program
 
 async def create_program(
     session: AsyncSession,
+    owner_id: uuid.UUID,
     *,
     name: str,
     platform: str = "H1",
@@ -21,8 +22,9 @@ async def create_program(
     out_scope: list | dict | None = None,
     settings: dict | None = None,
 ) -> Program:
-    """Create a program (request-scoped session commits via ``get_db``)."""
+    """Create a program owned by ``owner_id`` (request-scoped session commits via ``get_db``)."""
     program = Program(
+        owner_id=owner_id,
         name=name,
         platform=platform,
         reward_type=reward_type,
@@ -36,21 +38,36 @@ async def create_program(
     return program
 
 
-async def list_programs(session: AsyncSession) -> Sequence[Program]:
-    """Return all programs ordered by name."""
-    result = await session.execute(select(Program).order_by(Program.name))
+async def list_programs(session: AsyncSession, owner_id: uuid.UUID) -> Sequence[Program]:
+    """Return programs owned by the given user, ordered by name."""
+    result = await session.execute(
+        select(Program).where(Program.owner_id == owner_id).order_by(Program.name),
+    )
     return result.scalars().all()
 
 
 async def get_program(session: AsyncSession, program_id: uuid.UUID) -> Program | None:
-    """Fetch a program by id."""
+    """Fetch a program by id (no ownership check — use :func:`get_program_for_owner` from routes)."""
     result = await session.execute(select(Program).where(Program.id == program_id))
+    return result.scalar_one_or_none()
+
+
+async def get_program_for_owner(
+    session: AsyncSession,
+    program_id: uuid.UUID,
+    owner_id: uuid.UUID,
+) -> Program | None:
+    """Return the program only if it belongs to ``owner_id``."""
+    result = await session.execute(
+        select(Program).where(Program.id == program_id, Program.owner_id == owner_id),
+    )
     return result.scalar_one_or_none()
 
 
 async def update_program(
     session: AsyncSession,
     program_id: uuid.UUID,
+    owner_id: uuid.UUID,
     *,
     name: str | None = None,
     platform: str | None = None,
@@ -59,8 +76,8 @@ async def update_program(
     out_scope: list | dict | None = None,
     settings: dict | None = None,
 ) -> Program | None:
-    """Patch fields on a program; returns None if missing."""
-    program = await session.get(Program, program_id)
+    """Patch fields on a program; returns None if missing or not owned."""
+    program = await get_program_for_owner(session, program_id, owner_id)
     if program is None:
         return None
     if name is not None:
@@ -80,9 +97,9 @@ async def update_program(
     return program
 
 
-async def delete_program(session: AsyncSession, program_id: uuid.UUID) -> bool:
-    """Delete program (cascades to assets). Returns False if not found."""
-    program = await session.get(Program, program_id)
+async def delete_program(session: AsyncSession, program_id: uuid.UUID, owner_id: uuid.UUID) -> bool:
+    """Delete program if owned by ``owner_id`` (cascades to assets)."""
+    program = await get_program_for_owner(session, program_id, owner_id)
     if program is None:
         return False
     await session.delete(program)

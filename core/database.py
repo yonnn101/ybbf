@@ -32,7 +32,7 @@ class DatabaseSettings(BaseSettings):
         if not url.startswith("postgresql+asyncpg://"):
             msg = (
                 "DATABASE_URL must use the async driver "
-                "(postgresql+asyncpg://user:pass@host:5432/dbname)"
+                "(postgresql+asyncpg://user:pass@host:PORT/dbname; e.g. localhost:15432 when using docker-compose)"
             )
             raise ValueError(msg)
         return url

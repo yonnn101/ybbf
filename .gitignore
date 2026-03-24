@@ -9,6 +9,10 @@ id_rsa
 id_ed25519
 secrets/
 
+# Local tool dumps (keep directory via .gitkeep)
+storage/raw_outputs/*
+!storage/raw_outputs/.gitkeep
+
 .venv/
 venv/
 __pycache__/
