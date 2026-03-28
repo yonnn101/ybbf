@@ -20,6 +20,15 @@ class AuthSettings(BaseSettings):
         default=60,
         validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES",
     )
+    access_token_cookie_name: str = Field(
+        default="access_token",
+        validation_alias="ACCESS_TOKEN_COOKIE_NAME",
+    )
+    cookie_secure: bool = Field(
+        default=False,
+        validation_alias="COOKIE_SECURE",
+        description="Set True behind HTTPS so browsers send the auth cookie only over TLS.",
+    )
     superuser_email: str | None = Field(default=None, validation_alias="SUPERUSER_EMAIL")
     superuser_password: str | None = Field(default=None, validation_alias="SUPERUSER_PASSWORD")
 

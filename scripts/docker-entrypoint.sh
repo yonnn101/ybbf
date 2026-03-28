@@ -12,7 +12,10 @@ fi
 
 if [ "$1" = "worker" ]; then
   shift
-  exec celery -A workers.celery_app worker --loglevel="${CELERY_LOG_LEVEL:-info}" "$@"
+  exec celery -A workers.celery_app worker \
+    -Q fast,slow \
+    --loglevel="${CELERY_LOG_LEVEL:-info}" \
+    "$@"
 fi
 
 exec "$@"

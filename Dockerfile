@@ -19,7 +19,12 @@ COPY . .
 
 # Windows CRLF breaks shebang/exec ("no such file or directory"); normalize line endings.
 RUN sed -i 's/\r$//' /app/scripts/docker-entrypoint.sh \
-    && chmod +x /app/scripts/docker-entrypoint.sh
+    && chmod +x /app/scripts/docker-entrypoint.sh \
+    && groupadd --system yonnn \
+    && useradd --system --gid yonnn --home-dir /app --shell /usr/sbin/nologin yonnn \
+    && chown -R yonnn:yonnn /app
+
+USER yonnn
 
 EXPOSE 8000
 

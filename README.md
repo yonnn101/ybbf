@@ -12,7 +12,8 @@ From the repo root:
 docker compose up --build -d
 ```
 
-- **API:** http://localhost:8000 — OpenAPI docs at http://localhost:8000/docs  
+- **Web UI:** http://localhost:8080 — React app (nginx proxies `/auth`, `/programs`, `/admin`, `/health` to the API, so use this URL in the browser for same-origin API calls).  
+- **API (direct):** http://localhost:8000 — OpenAPI docs at http://localhost:8000/docs  
 - **Postgres:** `localhost:15432` → container `5432` (high host port avoids common Windows reserved ranges near 5432)  
   - If Docker still reports **bind / access permissions** on `15432`, run **Admin PowerShell:** `netsh interface ipv4 show excludedportrange protocol=tcp` and change the host side in `docker-compose.yml` (e.g. `30432:5432`) to a port **outside** those ranges; update `.env` / `DATABASE_URL` to match.  
 - **Redis:** `localhost:6379`  
@@ -35,6 +36,29 @@ docker compose up -d api
 
 Use `.gitattributes` so `scripts/docker-entrypoint.sh` stays LF on Windows; otherwise the entrypoint may fail.
 
+## Web UI (React)
+
+The **`frontend/`** app covers **register, login, programs (CRUD), asset ingest, graph view**, and a superuser **admin ping** button.
+
+**With Docker** (recommended full stack): `docker compose up --build -d` includes the **`frontend`** service. Open **http://localhost:8080** — nginx serves the built SPA and reverse-proxies API paths to **`api:8000`** (same-origin; no extra CORS setup).
+
+**Local dev:**
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173**. Vite **proxies** `/auth`, `/programs`, `/admin`, and `/health` to **http://127.0.0.1:8000**.
+
+- **Custom API URL (static build / CDN):** set `VITE_API_BASE_URL` in `frontend/.env` and configure **`CORS_ORIGINS`** on the API.
+
+```bash
+cd frontend
+npm run build   # or: docker compose build frontend
+```
+
 ## Quick start (local Python)
 
 1. Copy `.env.example` to `.env` and adjust values.
@@ -53,20 +77,24 @@ Use `.gitattributes` so `scripts/docker-entrypoint.sh` stays LF on Windows; othe
    uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
-6. Celery worker (optional):
+6. Celery worker (optional): consume both **fast** and **slow** queues (DNS/light work vs heavy scans).
 
    ```bash
-   celery -A workers.celery_app worker --loglevel=info
+   celery -A workers.celery_app worker -Q fast,slow --loglevel=info
    ```
+
+   Smoke test (with Redis, Postgres, and worker running): `celery -A workers.celery_app call yonnn.debug.ping` — expect result `"pong"` after the task runs on **fast**.
 
 ## Authentication (JWT)
 
 1. **Register:** `POST /auth/register` with JSON `{ "email", "password", "full_name?" }`.
-2. **Token:** `POST /auth/token` (OAuth2 form) — `username` = email, `password` = password. Returns `access_token`.
-3. **Use API:** send header `Authorization: Bearer <access_token>` for `/programs/*` and asset routes.
-4. **Profile:** `GET /auth/me` with Bearer token.
+2. **Token:** `POST /auth/token` (OAuth2 form) — `username` = email, `password` = password. Returns `access_token` in JSON (Postman, scripts, OpenAPI).
+3. **Cookie (browser UI):** the same response also sets an **httpOnly** cookie (name from **`ACCESS_TOKEN_COOKIE_NAME`**, default `access_token`) with lifetime aligned to **`ACCESS_TOKEN_EXPIRE_MINUTES`**. The React app uses **`credentials: 'include'`** and does **not** store the JWT in `localStorage`.
+4. **Use API:** send **`Authorization: Bearer <access_token>`** *or* send the auth cookie — protected routes accept either (Bearer wins if both are present).
+5. **Logout (cookie clients):** `POST /auth/logout` clears the cookie.
+6. **Profile:** `GET /auth/me` with Bearer or cookie.
 
-Set **`JWT_SECRET_KEY`** in production (see `.env.example`). Docker Compose passes `JWT_SECRET_KEY` from your environment or a dev default.
+Set **`JWT_SECRET_KEY`** in production (see `.env.example`). Use **`COOKIE_SECURE=true`** when the API is only served over HTTPS so browsers send the cookie on TLS only.
 
 ### Superuser bootstrap
 
@@ -77,7 +105,7 @@ Optional env vars (see `.env.example`):
 
 Use `GET /auth/me` to confirm `is_superuser`. Superuser-only routes live under **`/admin/*`** (e.g. `GET /admin/ping` with Bearer token).
 
-Public without auth: `/health`, `/auth/register`, `/auth/token`, `/docs`, `/openapi.json`.
+Public without auth: `/health`, `/auth/register`, `/auth/token`, `/docs`, `/openapi.json`. (`/auth/logout` is safe unauthenticated — it only clears the cookie.)
 
 ## API highlights
 
@@ -127,6 +155,7 @@ External tools (Subfinder, Nuclei, …) subclass **`core.base_tool.AsyncBaseTool
 | Path | Role |
 |------|------|
 | `api/` | FastAPI routes |
+| `frontend/` | React (Vite) UI |
 | `core/` | DB, config, BaseTool |
 | `models/` | SQLAlchemy ORM |
 | `schemas/` | Pydantic DTOs |

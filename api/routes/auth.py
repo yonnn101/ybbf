@@ -1,12 +1,13 @@
-"""Interface layer: registration, OAuth2 token, and current-user profile."""
+"""Interface layer: registration, OAuth2 token, cookie session, and current-user profile."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_active_user, get_db
+from core.auth_settings import get_auth_settings
 from models.user import User
 from schemas.auth import Token, UserCreate, UserRead
 from services import auth_service
@@ -37,10 +38,11 @@ async def register(
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(
+    response: Response,
     db: AsyncSession = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends(),
 ) -> Token:
-    """OAuth2 password flow: use **username** = email, **password** = password."""
+    """OAuth2 password flow: **username** = email. Sets httpOnly ``access_token`` cookie for browsers."""
     user = await auth_service.authenticate_user(
         db,
         form_data.username,
@@ -55,12 +57,36 @@ async def login_for_access_token(
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     access_token = auth_service.issue_access_token(user.id)
+    auth_cfg = get_auth_settings()
+    max_age = auth_cfg.access_token_expire_minutes * 60
+    response.set_cookie(
+        key=auth_cfg.access_token_cookie_name,
+        value=access_token,
+        httponly=True,
+        max_age=max_age,
+        secure=auth_cfg.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
     return Token(access_token=access_token)
+
+
+@router.post("/logout")
+async def logout(response: Response) -> dict[str, str]:
+    """Clear the auth cookie (call from the SPA on sign-out)."""
+    auth_cfg = get_auth_settings()
+    response.delete_cookie(
+        key=auth_cfg.access_token_cookie_name,
+        path="/",
+        samesite="lax",
+        secure=auth_cfg.cookie_secure,
+    )
+    return {"status": "ok"}
 
 
 @router.get("/me", response_model=UserRead)
 async def read_me(
     current_user: User = Depends(get_current_active_user),
 ) -> UserRead:
-    """Return the authenticated user (requires Bearer token)."""
+    """Return the authenticated user (Bearer token or cookie)."""
     return UserRead.model_validate(current_user)

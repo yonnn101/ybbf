@@ -8,8 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_active_user, get_db
+from models.asset import Asset
+from models.enums import AssetType
 from models.user import User
 from schemas.asset_actions import AssetIngestRequest
+from schemas.discovery import SubdomainDiscoveryRequest, SubdomainDiscoveryResponse
 from schemas.graph import GraphEdge, GraphNode, GraphView
 from services import asset_service, program_service
 
@@ -62,3 +65,47 @@ async def ingest_asset(
         "asset_id": str(child.id),
         "relation_id": str(rel.id) if rel else None,
     }
+
+
+@router.post(
+    "/programs/{program_id}/tasks/subdomain-discovery",
+    response_model=SubdomainDiscoveryResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_subdomain_discovery(
+    program_id: uuid.UUID,
+    body: SubdomainDiscoveryRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> SubdomainDiscoveryResponse:
+    """Queue Subfinder + DNS resolution for the program (Celery worker must be running)."""
+    program = await program_service.get_program_for_owner(db, program_id, current_user.id)
+    if program is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Program not found")
+
+    root = await db.get(Asset, body.root_domain_asset_id)
+    if root is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Root domain asset not found")
+    if root.program_id != program_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Root asset does not belong to this program",
+        )
+    if root.type != AssetType.DOMAIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Root asset must have type DOMAIN",
+        )
+
+    domain = (body.domain or root.value or "").strip()
+    if not domain:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Domain value is empty")
+
+    from workers.celery_app import celery_app
+
+    async_result = celery_app.send_task(
+        "yonnn.discovery.process_subdomain_discovery",
+        args=[str(program_id), str(body.root_domain_asset_id), domain],
+        queue="slow",
+    )
+    return SubdomainDiscoveryResponse(task_id=async_result.id)

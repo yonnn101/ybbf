@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
@@ -49,6 +51,19 @@ app = FastAPI(
 )
 
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+
+_cors = os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173",
+)
+_cors_origins = [o.strip() for o in _cors.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(auth.router)
 app.include_router(admin.router)

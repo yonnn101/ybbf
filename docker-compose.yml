@@ -62,6 +62,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: yonnn-frontend:local
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
   worker:
     build:
       context: .
